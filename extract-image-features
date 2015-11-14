@@ -1,0 +1,89 @@
+#!/usr/bin/python
+import json
+import argparse
+from PIL import Image
+import os
+import sys
+
+
+def thumbnail_fn(fn, dir='thumbnails'):
+    fn = os.path.basename(fn)
+    fn = fn[:fn.index('.')]
+    return os.path.join(dir, fn + '.png')
+
+
+def image_fn(fn):
+    return os.path.join('images/', os.path.basename(fn))
+
+
+def stretch(im, size, filter=Image.NEAREST):
+    im.load()
+    im = im._new(im.im.stretch(size, filter))
+    return im
+
+
+def crop_by_margins(im, margin_w, margin_h):
+    w, h = im.size
+    cw = int(margin_w * w)
+    ch = int(margin_h * h)
+    return im.crop((cw, ch, w - cw, h - ch))
+
+
+def get_thumbnail(fn, w, h, margin_w, margin_h):
+    im = Image.open(fn)
+    if im.mode != 'L':
+        im = im.convert('L')
+    if margin_w or margin_h:
+        im = crop_by_margins(im, margin_w, margin_h)
+
+    return stretch(im, (w, h), Image.ANTIALIAS)
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-c', '--collection',
+                        help='name of the collection to use')
+    parser.add_argument("-d", '--destination',
+                        help='save features here')
+    parser.add_argument("-D", '--file-name-list',
+                        help='save file names here')
+    parser.add_argument('-W', '--width', type=int,
+                        help='width of the thumbnail')
+    parser.add_argument('-H', '--height', type=int,
+                        help='height of the thumbnail')
+    parser.add_argument('--margin-width', type=float,
+                        help='cut this fraction of the sides')
+    parser.add_argument('--margin-height', type=float,
+                        help='cut this fraction off the top and bottom')
+    parser.add_argument('--big-thumbnails', action='store_true',
+                        help='make a set of thumbnails at double size')
+
+    args = parser.parse_args()
+
+    f = open(args.collection)
+    fout = open(args.destination, 'w')
+    if args.file_name_list:
+        f_names = open(args.file_name_list, 'w')
+
+    for fn in json.load(f):
+        fn = image_fn(fn)
+        thumbnail = get_thumbnail(fn, args.width, args.height,
+                                  args.margin_width, args.margin_height)
+        tfn = thumbnail_fn(fn)
+        thumbnail.save(tfn)
+        if args.big_thumbnails:
+            thumbnail = get_thumbnail(fn, args.width * 2, args.height * 2,
+                                      args.margin_width, args.margin_height)
+            tfn = thumbnail_fn(fn, dir='big-thumbnails')
+            thumbnail.save(tfn)
+
+        print >> fout, ','.join(str(x) for x in thumbnail.getdata())
+        if args.file_name_list:
+            print >> f_names, tfn
+
+    f.close()
+    fout.close()
+    if args.file_name_list:
+        f_names.close()
+
+main()

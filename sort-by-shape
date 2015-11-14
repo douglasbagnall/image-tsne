@@ -1,0 +1,143 @@
+#!/usr/bin/python
+#-*- coding: utf-8 -*-
+import json
+import argparse
+from PIL import Image
+import sys
+import os
+from collections import Counter
+from math import log, exp
+import random
+
+COLLECTIONS_DIR = "collections"
+
+def get_size(fn):
+    im = Image.open(fn)
+    return im.size
+
+
+def stat_generator(dir, extension=None):
+    for fn in os.listdir(dir):
+        if fn.endswith('.txt'):
+            continue
+        if extension and not fn.endswith(extension):
+            continue
+        ffn = os.path.join(dir, fn)
+        try:
+            w, h = get_size(ffn)
+        except Exception, e:
+            print >> sys.stderr, "couldn't read %s (%s)" % (fn, e)
+            continue
+        ratio = float(w) / float(h)
+        area = w * h
+        yield (fn, w, h, ratio, area)
+
+
+
+def get_image_histograms(dir, extension):
+    areas = Counter()
+    ratios = Counter()
+    for fn, w, h, ratio, area in stat_generator(dir, extension):
+        ratios['%.1f' % ratio] += 1
+        areas['%.1f' % (log(area, 10) * 0.5)] += 1
+
+    return areas, ratios
+
+def value_bar(v, scale):
+    scale_v = v * scale
+    bar = u'█' * int(scale_v)
+    bar += u" ▏▎▍▌▋▊▉"[int((scale_v - int(scale_v)) * 8)]
+    return bar.encode('utf-8')
+
+def print_histogram(d, exponent=None):
+    sum_v = sum(d.values())
+    start_v = sum_v // 200
+    end_v = sum_v - start_v
+    cum_v = 0
+    keys = [float(x) for x in d.keys()]
+    low = int(min(keys) * 10)
+    high = int(max(keys) * 10) + 2
+    scale = 70.0 / max(d.values())
+
+    for i in range(low, high):
+        k = '%.1f' % (i * 0.1)
+        v = d[k]
+        cum_v += v
+        if cum_v < start_v:
+            continue
+        elif cum_v - v < start_v:
+            print ("%s%s %d outliers ↑" %
+                   (' ' * 18, value_bar(cum_v - v, scale), cum_v - v))
+
+        if cum_v > end_v:
+            print ("%s%s %d outliers ↓" %
+                   (' '* 18, value_bar(sum_v - cum_v, scale), sum_v - cum_v))
+            break
+
+        if exponent:
+            print "%10d: %5s" % (int(exponent ** float(k)), v),
+        else:
+            print "%10s: %5s" % (k, v if v else ''),
+        print value_bar(v, scale)
+
+def print_stats(extension):
+    areas, ratios = get_image_histograms('images', extension)
+    print "square root of areas (approximate side length)"
+    print_histogram(areas, 10)
+    print
+    print "aspect ratios"
+    print_histogram(ratios)
+    print "total images: %d" % sum(areas.values())
+
+
+def make_clusters(dir, cluster_params, extension):
+    clusters = {x[0]: [] for x in cluster_params}
+
+    for fn, w, h, ratio, area in stat_generator(dir, extension):
+        for (name, min_ratio, max_ratio,
+             min_area, max_area) in cluster_params:
+            if (area >= min_area and
+                area <= max_area and
+                ratio >= min_ratio and
+                ratio <= max_ratio):
+                clusters[name].append(fn)
+
+    return clusters
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-H', '--histograms', action='store_true',
+                        help='draw histograms of distribution')
+    parser.add_argument('-e', '--extension', default=None,
+                        help='restrict to file names ending thus')
+    parser.add_argument('--min-size', default=80, type=int,
+                        help='ignore images small than this²')
+    parser.add_argument('--max-size', default=3000, type=int,
+                        help='ignore images bigger than this²')
+    parser.add_argument('--limit', default=None, type=int,
+                        help='only find this many')
+    args = parser.parse_args()
+    random.seed(11)
+    if args.histograms:
+        print_stats(args.extension)
+    else:
+        min_area = args.min_size * args.min_size
+        max_area = args.max_size * args.max_size
+
+        cluster_params = [
+            ('portrait', 0.5, 0.875, min_area, max_area),
+            ('square', 0.875, 1.142857, min_area, max_area),
+            ('landscape', 1.142857, 1.7, min_area, max_area),
+        ]
+
+        clusters = make_clusters('images', cluster_params, args.extension)
+        for k, v in clusters.items():
+            print k, len(v)
+            random.shuffle(v)
+            if args.limit:
+                v = v[:args.limit]
+            f = open(os.path.join(COLLECTIONS_DIR, "%s-filelist.json" % k), 'w')
+            json.dump(v, f)
+            f.close()
+
+main()

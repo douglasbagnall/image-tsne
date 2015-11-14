@@ -1,0 +1,150 @@
+#!/usr/bin/python
+import json
+import requests
+import argparse
+import os
+import sys
+import random
+
+BASE_URL = "http://api.digitalnz.org/v3/records.json"
+API_KEY_FILE = os.path.join(os.path.dirname(__file__), 'digital-nz-api-key')
+IMAGE_DIR = os.path.join(os.path.dirname(__file__), '../images')
+
+
+def query(params):
+    f = open(API_KEY_FILE)
+    params['api_key'] = f.read().strip()
+    f.close()
+    print >>sys.stderr, params
+    r = requests.get(BASE_URL, params=params)
+    return r
+
+
+def get_some_records(page, n=20, sort=None):
+    params = {
+        'text': '',
+        'and[category][]': 'Images',
+        'fields': 'title,source_url,thumbnail_url,id',
+        'page': page,
+        'per_page': n,
+    }
+    if sort is not None:
+        if ',' in sort:
+            sort, order = sort.split(',', 1)
+        else:
+            order = 'asc'
+        params['sort'] = sort
+        params['direction'] = order
+    try:
+        r = query(params).json()
+        return [x for x in r['search']['results']
+                if x['thumbnail_url'][:4] == 'http']
+    except Exception, e:
+        print >> sys.stderr, "could not decode json; exception %s" % e
+        return []
+
+
+def get_image_count():
+    params = {
+        'text': '',
+        'and[category][]': 'Images',
+        'per_page': 0,
+    }
+    return query(params).json()['search']['result_count']
+
+
+def get_images(n_wanted, sample_size, timeout, overwrite, sort, decimate):
+    n_images = get_image_count()
+    print >> sys.stderr, n_images
+    records = []
+    n_pages = n_images // sample_size
+    if n_pages > 100000:
+        print >> sys.stderr, ("only using 100000 out of %d pages "
+                              "(DigitalNZ restriction)"
+                              % n_pages)
+        n_pages = 100000
+
+    while len(records) < n_wanted:
+        page = random.randrange(n_pages)
+        sample = get_some_records(page, sample_size, sort)
+        print >>sys.stderr, ("getting %d (wanted %s) images from page %d" %
+                             (len(sample), sample_size, page))
+        skipped = 0
+        successes = 0
+        for x in sample:
+            xid = x['id']
+            if random.random() > decimate:
+                skipped += 1
+                continue
+            textfile = os.path.join(IMAGE_DIR, "%s.txt" % xid)
+            if not overwrite and os.path.exists(textfile):
+                print >> sys.stderr, "not overwriting item %s" % xid
+                continue
+
+            try:
+                r = requests.get(x['thumbnail_url'], timeout=timeout)
+            except Exception, e:
+                print >> sys.stderr, ("got exception %s looking for %s" %
+                                      (e, x['thumbnail_url']))
+            if r.status_code >= 400:
+                print >> sys.stderr, ("item %s, thumbnail %s got response %d" %
+                                      (xid, x['thumbnail_url'], r.status_code))
+                continue
+
+            ct = r.headers.get('content-type', 'application/unknown')
+            if ';' in ct:
+                short_ct = ct[:ct.index(';')]
+            else:
+                short_ct = ct
+            if short_ct[:5] == 'text/':
+                print >> sys.stderr, ("ignoring image %s of type %s" %
+                                      (xid, short_ct))
+                continue
+
+            ext = {
+                'image/gif': 'gif',
+                'image/png': 'png',
+                'image/jpeg': 'jpg',
+                'image/x-ms-bmp': 'bmp',
+            }.get(short_ct, 'JPG')
+            print >> sys.stderr, " saving %s as %s.%s" % (ct, xid, ext)
+
+            f = open(os.path.join(IMAGE_DIR, "%s.%s" % (xid, ext)), 'w')
+            f.write(r.content)
+            f.close()
+            f = open(textfile, 'w')
+            json.dump(x, f)
+            f.close()
+            records.append(x)
+            successes += 1
+        print >> sys.stderr, ("sample of %d: skipped %d, success %d failure %d"
+                              % (len(sample), skipped, successes,
+                                 len(sample) - skipped - successes))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-r', '--rng-seed', default=None, type=int,
+                        help='seed the random number generator')
+    parser.add_argument('-s', '--sample-size', default=5, type=int,
+                        help='use sub-samples of this size')
+    parser.add_argument('-d', '--decimate', default=1, type=float,
+                        help='use approximately this portion of each sample')
+    parser.add_argument('-n', '--n-images', default=100, type=int,
+                        help='fetch this many images')
+    parser.add_argument('-o', '--overwrite', action='store_true',
+                        help='re-fetch images that we seem to already have')
+    parser.add_argument('-t', '--timeout', default=10, type=float,
+                        help="don't wait longer than this many seconds")
+    parser.add_argument('-S', '--sort', default=None,
+                        help='sort using (date|syndication_date)[,(desc|asc)]')
+
+    args = parser.parse_args()
+    if args.rng_seed is not None:
+        random.seed(args.rng_seed)
+
+    get_images(args.n_images, args.sample_size, timeout=args.timeout,
+               overwrite=args.overwrite, sort=args.sort,
+               decimate=args.decimate)
+
+main()

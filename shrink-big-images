@@ -1,0 +1,51 @@
+#!/usr/bin/python
+#-*- coding: utf-8 -*-
+import argparse
+from PIL import Image
+import sys
+import os
+from collections import Counter
+from math import log, exp
+import random
+
+COLLECTIONS_DIR = "collections"
+
+def stretch(im, size, filter=Image.BICUBIC):
+    im.load()
+    im = im._new(im.im.stretch(size, filter))
+    return im
+
+def shrink_image(fn, max_area):
+    im = Image.open(fn)
+    w, h = im.size
+    area = w * h
+    if area < max_area:
+        return
+    side = area ** 0.5
+    max_side = max_area ** 0.5
+    scale = max_side / side
+    tw = int (w * scale + 0.5)
+    th = int (h * scale + 0.5)
+    print ("%s has sides of %d, %d (~%.1f) > %.1f "
+           "scaling by %.2f to %d, %d" %
+           (fn, w, h, side, max_side, scale, tw, th))
+    im = stretch(im, (tw, th))
+    os.rename(fn, fn.replace('images/', 'images/shrunk/'))
+    im.save(fn, quality=95)
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-e', '--extension', default=None,
+                        help='restrict to file names ending thus')
+    parser.add_argument('--max-size', default=None, type=int,
+                        help='ignore images bigger than this²')
+    args = parser.parse_args()
+    max_area = args.max_size * args.max_size
+    DIR = 'images'
+    for fn in os.listdir(DIR):
+        if args.extension and not fn.endswith(args.extension):
+            continue
+        ffn = os.path.join(DIR, fn)
+        shrink_image(ffn, max_area)
+
+main()

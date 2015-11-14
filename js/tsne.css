@@ -1,0 +1,10 @@
+#current_img {
+  position: absolute;
+  right:5px;
+  top: 5px;
+}
+
+svg {
+  background: #ffc;
+  border: 1px solid #666;
+}

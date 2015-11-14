@@ -1,0 +1,16 @@
+/images/
+*.pyc
+*~
+.emacs.*
+/junk/
+/fetch/*api-key
+/collections/
+/datasets/
+/examples/
+/fasttsne
+/features/
+/images.tar.gz
+/maps-2d/
+/names/
+/thumbnails/
+/big-thumbnails/
