@@ -111,7 +111,7 @@ def main():
     parser.add_argument('-e', '--extension', default=None,
                         help='restrict to file names ending thus')
     parser.add_argument('--min-size', default=80, type=int,
-                        help='ignore images small than this²')
+                        help='ignore images smaller than this²')
     parser.add_argument('--max-size', default=3000, type=int,
                         help='ignore images bigger than this²')
     parser.add_argument('--limit', default=None, type=int,
