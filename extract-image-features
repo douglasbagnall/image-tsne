@@ -52,7 +52,7 @@ def main():
     parser.add_argument('-H', '--height', type=int,
                         help='height of the thumbnail')
     parser.add_argument('--margin-width', type=float,
-                        help='cut this fraction of the sides')
+                        help='cut this fraction off the sides')
     parser.add_argument('--margin-height', type=float,
                         help='cut this fraction off the top and bottom')
     parser.add_argument('--big-thumbnails', action='store_true',
