@@ -1,4 +1,4 @@
-data_dirs = features names thumbnails
+data_dirs = features names thumbnails big-thumbnails
 
 $(data_dirs):
 	mkdir -p $@
