@@ -45,9 +45,13 @@ Do something like
 
     make features/square.csv
 
-after which `features/square.csv` will contain 400 numbers for each
-image. There are no names or IDs in this files, but the order of the
-images is the same as in `collections/square-filelist.json`.
+after which `features/square.csv` will contain 400 numbers for each image.
+There are no names or IDs in this files, but the order of the images is the
+same as in `collections/square-filelist.json`. Then do the same thing with the
+other two portrait files:
+
+    make features/portrait.csv
+    make features/landscape.csv
 
 ### Do the t-SNE
 
